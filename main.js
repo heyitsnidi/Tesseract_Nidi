@@ -124,7 +124,8 @@ try {
                 vec3 layer3 = sRight.rgb * c3 * bandBright;
                 
                 // Mix Layers
-                vec3 finalColor = (layer1 + layer2 + layer3) * 0.5; // significantly brighter for better visibility
+                // Mix Layers
+                vec3 finalColor = (layer1 + layer2 + layer3) * 0.55; // significantly brighter for better visibility
                 
                 // FILLER TEXTURE (Background)
                 float sceneAlpha = sCenter.a;
@@ -167,14 +168,16 @@ try {
 
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.4, 0.85);
     bloomPass.threshold = 0.0;
-    bloomPass.strength = 0.15; // High glow
+    bloomPass.strength = 0.12; // Slight glow
     bloomPass.radius = 0.1; // Sharp glow
 
     const warpPass = new ShaderPass(WarpShader);
 
     const composer = new EffectComposer(renderer);
+    // OPTIMIZATION: Clamp to 2.0 to prevent massive FPS drop on 4k/Retina screens
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0)); 
     composer.addPass(renderScene);
-    // composer.addPass(bloomPass);     // Bloom first
+    composer.addPass(bloomPass);     // Bloom first
     composer.addPass(warpPass);      // Then Warp the bloomed image
 
     // SPHERE SHADER for "Voxel/Dot" Look (Matches reference image style)
@@ -482,11 +485,8 @@ try {
             }
         }
         
-        // FIST (Screenshot)
-        if (isFolded(8) && isFolded(12) && isFolded(16) && isFolded(20) && isFolded(4)) {
-             return 'FIST';
-        }
-
+        // FIST (Screenshot) - REMOVED
+        
         return 'NEUTRAL';
     }
 
@@ -1010,7 +1010,7 @@ try {
                 if (label === 'Right') {
                     rightMudra = detected;
                    
-                    if (rightMudra !== 'NEUTRAL' && rightMudra !== 'FIST') {
+                    if (rightMudra !== 'NEUTRAL') {
                         addStroke(rightMudra, indexTip); 
                         
                         // Warp Logic - Target Update (Smooth in Animate)
@@ -1070,18 +1070,10 @@ try {
                 // "Glide" -> Now "Follow" (X/Y) but Fixed Z (Background)
                 if (label === 'Left') {
                     leftHandFound = true;
-                    if (detected === 'FIST') {
-                         leftAction = 'FIST';
-                         // Debounce screenshot
-                         if (Date.now() - lastScreenshotTime > 2000) {
-                             takeScreenshot();
-                             lastScreenshotTime = Date.now();
-                         }
-                    } else {
-                        // GLIDE/FOLLOW
-                        leftAction = 'TRAIL';
-                        
-                        // Map Hand (0..1) to World (-8..8, -6..6)
+                    // GLIDE/FOLLOW
+                    leftAction = 'TRAIL';
+                    
+                    // Map Hand (0..1) to World (-8..8, -6..6)
                         const targetX = indexTip.x * 16 - 8;
                         const targetY = -(indexTip.y * 12 - 6);
                         
@@ -1091,10 +1083,8 @@ try {
                         const targetZ = (handScale - nominalScale) * 10.0; 
 
                         // Update Target (for Lerp in animate)
-                        window.leftHandTarget.x = targetX;
                         window.leftHandTarget.y = targetY;
                         window.leftHandTarget.z = targetZ;
-                    }
                 }
             }
 
@@ -1172,171 +1162,12 @@ try {
         }
     }
 
-    // --- SCREENSHOT & RECORDING LOGIC ---
-    let lastScreenshotTime = 0;
-    window.screenshotSerial = 0;
+    // --- SCREENSHOT & RECORDING LOGIC REMOVED ---
     
     // Globals for Warp Smoothing
     window.targetWarpMouse = new THREE.Vector2(0.5, 0.5);
     window.targetWarpFalloff = 4.0; // Default: Focused/Small (Distance)
     window.currentWarpFalloff = 4.0;
-
-    window.takeScreenshot = function() {
-        console.log("📸 Function: takeScreenshot called");
-        try {
-            // Generate Time-Based Serial Code
-            const date = new Date();
-            const year = String(date.getFullYear()).slice(-2);
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hour = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            const sec = String(date.getSeconds()).padStart(2, '0');
-            
-            // Code: YYMMDD-HHMMSS
-            const codeStr = `${year}${month}${day}-${hour}${min}${sec}`;
-            const filename = `timescape_${codeStr}.png`;
-            
-            // 1. Get raw WebGL image
-            const finalDataURL = renderer.domElement.toDataURL('image/png');
-            
-            // 2. Auto-Save (Download)
-            downloadImage(finalDataURL, filename);
-
-
-            // 3. Add to Gallery - REMOVED
-            // addToGallery(finalDataURL, filename);
-            
-            // Feedback
-            if(mudraLabel) {
-                    const oldText = mudraLabel.innerText;
-                    mudraLabel.innerText = `📸 Captured`;
-                    setTimeout(() => mudraLabel.innerText = oldText, 1500);
-            }
-
-        } catch(e) {
-            console.error("Screenshot Error:", e);
-        }
-    };
-
-    function downloadImage(dataURL, filename) {
-        const link = document.createElement('a');
-        link.href = dataURL;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    async function shareImage(dataURL, filename) {
-        // Convert DataURL to Blob
-        const fetchRes = await fetch(dataURL);
-        const blob = await fetchRes.blob();
-        const file = new File([blob], filename, { type: 'image/png' });
-
-        // Try Native Share
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-                await navigator.share({
-                    files: [file],
-                    title: 'Timescape Screenshot',
-                    text: 'Check out this moment from Timescape!'
-                });
-                console.log('Shared successfully');
-                return;
-            } catch (err) {
-                if (err.name !== 'AbortError') console.error('Share failed:', err);
-            }
-        }
-        
-        // Fallback: Download
-        console.log("Sharing not supported or cancelled, downloading...");
-        const link = document.createElement('a');
-        link.href = dataURL;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    // Global Recording State
-    let mediaRecorder = null;
-    let recordedChunks = [];
-    let isRecording = false;
-
-    window.toggleRecording = function() {
-        const btn = document.getElementById('record-btn');
-        const icon = btn ? btn.querySelector('.icon') : null;
-        const text = btn ? btn.querySelector('.text') : null;
-
-        if (!isRecording) {
-            // START RECORDING
-            console.log("🔴 Starting Recording...");
-            recordedChunks = [];
-            
-            // Capture Canvas Stream (60 FPS)
-            const stream = renderer.domElement.captureStream(60);
-            
-            // Prefer VP9 for quality, fallback to defaults
-            let options = { mimeType: 'video/webm;codecs=vp9' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                options = { mimeType: 'video/webm' };
-            }
-
-            try {
-                mediaRecorder = new MediaRecorder(stream, options);
-            } catch (e) {
-                console.error("MediaRecorder Init Failed:", e);
-                alert("Recording not supported on this browser.");
-                return;
-            }
-
-            mediaRecorder.ondataavailable = function(event) {
-                if (event.data.size > 0) {
-                    recordedChunks.push(event.data);
-                }
-            };
-
-            mediaRecorder.onstop = function() {
-                console.log("⏹ Recording Stopped. Saving...");
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                
-                // Download
-                const now = new Date().toISOString().replace(/[:.]/g, '-');
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `timescape_rec_${now}.webm`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                }, 100);
-            };
-
-            mediaRecorder.start();
-            isRecording = true;
-            
-            // Update UI
-            if (btn) btn.style.background = "rgba(255, 0, 0, 0.3)";
-            if (icon) icon.innerText = "⏹"; // Stop Icon
-            if (text) text.innerText = "Stop";
-
-        } else {
-            // STOP RECORDING
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-            isRecording = false;
-
-            // Update UI
-            if (btn) btn.style.background = "rgba(255, 255, 255, 0.05)";
-            if (icon) icon.innerText = "⏺"; // Record Icon
-            if (text) text.innerText = "Record";
-        }
-    };
 
 
     if (typeof Hands !== 'undefined') {
